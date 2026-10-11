@@ -20,10 +20,5 @@ Challenges:
 
   The biggest problem is that the IMU drifts really fast, because any little error in the acceleration gets added up twice. Without the GPS, the position drifts further and further off, which is the red line in the plots. Another problem I ran into was that the velocity kept slowly creeping even when I was holding the sensor still, so I made the code slow the velocity down a little (multiplying it by 0.9) whenever the acceleration reads zero. I also first tried to turn the acceleration into East and North using only the heading angle, but that gets worse when the sensor isn't flat, so I switched to using all three angles (roll, pitch, and yaw). Even so, it still isn't perfect. The mix I use is fixed (90/10 for position and 80/20 for velocity), so it can't change if the GPS gets noisier or if I move around a lot, and that leaves some position drift. It also doesn't work as well when the sensor is moving quickly or changing direction a lot. And my way of changing latitude and longitude into meters pretends the Earth is flat, so it only works over small areas.
 
-What I am going to Improve:
 
-  I want to work on the Kalman filter (MyInsGpsKalman.h). The idea is that a Kalman filter can change how much it trusts the GPS or the IMU depending on how noisy things are and how the sensor is moving, instead of always using the same 90/10 mix. I also want to figure out the accelerometer's built-in offset (bias) and remove it so the drift grows more slowly, and I want to measure how far off I really am compared to a known path so I have actual error numbers instead of just plots.
 
-What I used:
-
-  Arduino [board], Adafruit BNO055 IMU, a GPS module [model], and these Arduino libraries: Adafruit BNO055, Adafruit Unified Sensor, TinyGPSPlus, and SoftwareSerial. I used MATLAB for the plots. To run it, upload gpsPlusIns/gpsPlusIns.ino, open the Serial Monitor at 115200 baud, take it outside so the GPS finds satellites, and walk around. Type "b" to fake a 10 second GPS outage.
