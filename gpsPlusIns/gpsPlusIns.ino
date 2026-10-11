@@ -3,7 +3,6 @@
 #include <Adafruit_BNO055.h>
 #include <SoftwareSerial.h>
 #include <TinyGPSPlus.h>
-#include "MyInsGpsKalman.h"
 
 SoftwareSerial gpsSerial(2, 3);
 TinyGPSPlus gps;
@@ -12,10 +11,6 @@ Adafruit_BNO055 myIMU = Adafruit_BNO055();
 // GPS Home Anchor
 double homeLat = 0.0, homeLon = 0.0;
 bool homeSet = false;
-
-// Instantiate Filters: Process Noise = 0.5 (m/s^2)^2, GPS Noise = 2.5 meters
-MyInsGpsKalman kalmanX(0.5, 2.5);
-MyInsGpsKalman kalmanY(0.5, 2.5);
 
 unsigned long lastTime = 0;
 float posX_GPS = 0.0, posY_GPS = 0.0;
@@ -125,15 +120,7 @@ void loop() {
     if (accEast == 0.0)  velX_Comp *= 0.9;
     if (accNorth == 0.0) velY_Comp *= 0.9;
 
-    // My experimental Kalman predict step
-    kalmanX.predict(accEast, dt);
-    kalmanY.predict(accNorth, dt);
-
-    // --- ZUPT (Zero Velocity Update) Threshold ---
-    if (accEast == 0.0)  kalmanX.applyZUPT();
-    if (accNorth == 0.0) kalmanY.applyZUPT();
-
-    // Update the filters (Complementary and experimental Kalman) with GPS meas and when no GPS blackout forced
+    // Update the Complementary filter with GPS meas and when no GPS blackout forced
     if (homeSet && gps.location.isUpdated() && !simBlackout) {
       latLonToMeters(gps.location.lat(), gps.location.lng(), posX_GPS, posY_GPS);
 
@@ -150,10 +137,6 @@ void loop() {
       // Complementary Weighting of velocity estimates (80% Accel / 20% GPS)
       velX_Comp = (0.80 * velX_Comp) + (0.20 * velX_GPS);
       velY_Comp = (0.80 * velY_Comp) + (0.20 * velY_GPS);
-
-      // My experimental Kalman update stage for each of the two position dimensions, X and Y
-      kalmanX.updateGPS(posX_GPS);
-      kalmanY.updateGPS(posY_GPS);
     }
 
     // Output to Serial Plotter
@@ -165,8 +148,6 @@ void loop() {
     Serial.print(posY_INS); Serial.print(",");
     Serial.print(posX_Comp); Serial.print(",");
     Serial.print(posY_Comp); Serial.print(",");
-    Serial.print(kalmanX.x); Serial.print(",");
-    Serial.print(kalmanY.x); Serial.print(",");
     Serial.println(simBlackout ? 1 : 0);
   }
 }
