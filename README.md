@@ -1,6 +1,6 @@
 What was this project:
 
-  Basically, in this project, I wanted to keep track of my position even when the GPS stops working, like it does when you go through a tunnel. GPS gives a position that doesn't drift, but it only updates about once a second and it can disappear. A motion sensor (the IMU, which is the "INS" part) updates really fast, but the position you get from it drifts away over time. So I tried to combine the two to get a fast, smooth position that doesn't drift too much and keeps going when the GPS is gone.
+  Basically, in this project, I wanted to keep track of my position even when the GPS stops working, like it does when you go through a tunnel. GPS gives a position that doesn't drift, but it only updates about 1-10Hz and it can disappear. A motion sensor (the INS based on IMU gyroscopes and accelerometers, and some signal processing) updates really fast (100Hz), but the position you get from it drifts away over time due to accumulation of errors. So I tried to combine the two to get a fast, smooth position that doesn't drift too much and keeps going when the GPS is gone.
 
 How did I build this Project:
 
@@ -8,11 +8,11 @@ How did I build this Project:
 
 What I found:
 
-  In this plot I walked around a loop. The blue X's are the GPS, and the arrows show where the GPS had gaps. The light blue line is my mixed estimate, and it keeps going smoothly right through the gaps. The red line is just the IMU by itself, and it wanders off the loop.
+  In this plot I walked around a loop. The blue X's are the GPS, and the two sided arrows show where the GPS had gaps. The light blue line is my mixed estimate, and it keeps going smoothly right through the gaps, with some drift. The red line is just the IMU by itself, and it wanders off the loop.
 
 ![GPS gaps filled by the complementary filter](images/gpsins_07_gap_fill_complementary.png)
 
-  When I zoom out, the IMU by itself ends up more than 1,000 meters away from where I started, even though the loop I walked is only about 400 meters wide. That shows how fast the errors grow when you add up acceleration twice. With the GPS mixed in, the estimate stays with the loop.
+  When I zoom out, the IMU by itself ends up more than 1,000 meters away from where I started, even though the loop I drove on is only about 400 meters wide. That shows how fast the errors grow when you add up acceleration twice. With the GPS mixed in, the estimate stays with the loop.
 
 ![IMU only drifts away](images/gpsins_06_ins_drift_zoomed_out.png)
 
