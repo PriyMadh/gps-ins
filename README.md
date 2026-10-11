@@ -1,89 +1,88 @@
-# GPS + INS Navigation on an Arduino
+# GPS + INS Project
 
-I wanted a position estimate that stays smooth and keeps working when GPS drops out, like in a tunnel. This project combines a GPS module with a BNO055 motion sensor (an IMU, which is the "INS" part) and tests what happens during a GPS outage.
+I wanted to see if I could keep track of my position even when the GPS stops working, like it does in a tunnel. For this project I used a GPS module and a BNO055 motion sensor (the IMU, which is the "INS" part) with an Arduino, and I tried mixing the two together.
 
-## The problem
+## Why mix them?
 
-- **GPS** gives a position about once per second. It's noisy and sometimes goes missing, but it never drifts.
-- **The IMU** gives acceleration about 50 times per second. If you add up acceleration twice you get position. It's smooth and fast, but small errors add up, so the position drifts away over time.
+- **GPS** gives me a position about once every second. It's a bit noisy and sometimes it disappears, but it doesn't drift away over time.
+- **The motion sensor** gives me acceleration about 50 times a second. If I add up the acceleration to get speed, and add up the speed to get position, I get a position that updates really fast. But small errors add up too, so the position slowly drifts further and further off.
 
-Each has a weakness the other doesn't, so I combined them.
+Each one is good at what the other one is bad at, so I combined them.
 
 ## How it works
 
-1. **Get acceleration.** The BNO055 gives linear acceleration (gravity already removed) and orientation (roll, pitch, yaw).
-2. **Rotate into East/North.** I use all three angles to turn the sensor's x/y/z acceleration into East and North acceleration. A deadband of 0.05 m/s² ignores tiny readings.
-3. **Dead reckoning.** Integrate acceleration into velocity, then velocity into position, at 50 Hz. This gives a position estimate from the IMU alone (`posX_INS`, `posY_INS`).
-4. **Convert GPS to meters.** The first valid GPS fix becomes the starting point (0, 0). Later fixes are converted from latitude/longitude into meters East and North using a flat-earth approximation.
-5. **Complementary filter.** Every time a new GPS fix arrives, I blend:
-   - position = 90% from the IMU estimate + 10% from GPS
-   - velocity = 80% from the IMU estimate + 20% from GPS speed and heading
+1. The BNO055 gives me acceleration (with gravity already taken out) and which way it's pointing (roll, pitch, yaw).
+2. I use those angles to turn the acceleration into East and North directions. If the acceleration is really tiny (less than 0.05 m/s²), I ignore it since it's mostly noise.
+3. I add up the acceleration to get velocity, then add up the velocity to get position. This is the "IMU only" position.
+4. The first time the GPS gets a good fix, I call that spot (0, 0). After that, I change each GPS latitude/longitude into meters East and North from that spot.
+5. Every time a new GPS fix comes in, I mix the two:
+   - position = 90% IMU + 10% GPS
+   - velocity = 80% IMU + 20% GPS
 
-   So I trust the IMU over short times, and GPS slowly pulls the estimate back. When acceleration reads zero, I also damp the velocity by 10% each step, so the estimate doesn't keep drifting while the sensor is still.
-6. **Test an outage.** Typing `b` in the Serial Monitor ignores GPS for 10 seconds. The code keeps running on the IMU alone, then goes back to using GPS.
+   So the IMU does most of the work, and the GPS slowly pulls the answer back so it doesn't drift away. This mix is called a complementary filter. I also slow down the velocity a little (multiply by 0.9) whenever the acceleration reads zero, so it doesn't keep creeping.
+6. To test a GPS outage, I type `b` in the Serial Monitor. The code then ignores the GPS for 10 seconds and only uses the motion sensor. After 10 seconds it goes back to using GPS.
 
-### What the sketch prints
-One line per update (about 50 per second):
+The Arduino prints one line of numbers about 50 times a second:
 
 ```
-GPS_X, GPS_Y, INS_X, INS_Y, Complementary_X, Complementary_Y, Kalman_X, Kalman_Y, Blackout(0/1)
+GPS_X, GPS_Y, INS_X, INS_Y, Complementary_X, Complementary_Y, Kalman_X, Kalman_Y, Blackout(0 or 1)
 ```
 
-All positions are in meters (X = East, Y = North). I copy this into MATLAB to make the plots.
+Everything is in meters (X = East, Y = North). I copy the numbers into MATLAB to make my plots.
 
-## Results
+## What I found
 
-**Filling GPS gaps.** On a loop, the GPS fixes (blue) have gaps, marked by the arrows. The complementary filter (light blue) stays continuous through the gaps. The IMU alone (red) wanders away from the loop.
+**It fills in the gaps in the GPS.** In this plot I walked a loop. The blue X's are the GPS positions, and the arrows show where the GPS had gaps. The light blue line (my mix) keeps going smoothly through the gaps. The red line, which is just the motion sensor, wanders off the loop.
 
 ![GPS gaps filled by the complementary filter](images/gpsins_07_gap_fill_complementary.png)
 
-**IMU drift over a longer time.** Zoomed out, the IMU-only path ends up more than 1,000 m from the start, even though the loop I walked is only about 400 m wide. Adding up acceleration twice makes errors grow very quickly. The fused estimate stays with the loop.
+**The motion sensor alone drifts a LOT.** When I zoom out, the red line (motion sensor only) ends up more than 1,000 m away from where I started, even though my loop is only about 400 m wide. Adding up acceleration twice makes errors grow really fast. The mixed version stays with the loop.
 
-![IMU-only drift, zoomed out](images/gpsins_06_ins_drift_zoomed_out.png)
+![Motion sensor only drifts away](images/gpsins_06_ins_drift_zoomed_out.png)
 
-## What doesn't work well yet
+## What still doesn't work well
 
-- The 90/10 and 80/20 weights are fixed, so the filter can't adjust when GPS is noisy or the sensor is moving a lot. The fused path still sits a bit off the GPS path.
-- I don't remove the accelerometer's own offset (bias), so errors build up during outages.
-- The East/North conversion trusts the BNO055's orientation. If that is off, acceleration gets pushed in the wrong direction.
-- The flat-earth conversion only works for small areas.
+- The 90/10 and 80/20 mix is fixed, so it can't change if the GPS gets noisier or I move around a lot. The mixed path is still a little off from the GPS path.
+- I don't fix the accelerometer's built-in offset, so errors still build up when the GPS is out.
+- I use the BNO055's angles to figure out which way is East and North. If those are a bit off, the acceleration gets pushed in the wrong direction.
+- Changing GPS to meters the way I did only works for small areas, because it pretends the Earth is flat.
 
-## Experimental: Kalman filter
+## Kalman filter (still experimenting)
 
-`MyInsGpsKalman.h` is an early Kalman filter I'm trying alongside the complementary filter, one per axis. Its state is position and velocity. It predicts using the IMU acceleration, and corrects with each GPS fix. Its settings are an acceleration noise of 0.5 (m/s²)² and a GPS noise of 2.5 m. It prints out as `Kalman_X, Kalman_Y`. I haven't tuned it or compared it carefully with the complementary filter yet, so the results above only use the complementary filter.
+The file `MyInsGpsKalman.h` is my first try at a Kalman filter, one for each direction (East and North). It keeps track of position and velocity. It uses the acceleration to guess where I'll be next, then fixes that guess every time a GPS fix comes in. I set the acceleration noise to 0.5 and the GPS noise to 2.5 m. It prints as `Kalman_X, Kalman_Y`. I haven't tuned it or compared it carefully to my complementary filter yet, so the plots above only show the complementary filter.
 
-## What I want to do next
+## What I want to try next
 
-- Tune the Kalman filter and compare it with the complementary filter on the same runs
-- Make it adjust its trust in GPS depending on noise and how the sensor is moving
-- Estimate and remove the accelerometer offset
-- Measure the actual error compared to a known path, and report numbers
+- Tune the Kalman filter and compare it to the complementary filter using the same walk
+- Make the filter trust the GPS more or less depending on how noisy it is and how I'm moving
+- Figure out the accelerometer offset and remove it
+- Measure how far off I really am compared to a known path, so I have actual error numbers
 
-## Hardware and software
+## What I used
 
 - Arduino [board]
-- Adafruit BNO055 IMU (I2C)
-- GPS module [model], 9600 baud, on pins 2 (RX) and 3 (TX)
+- Adafruit BNO055 motion sensor (I2C)
+- GPS module [model], connected to pins 2 (RX) and 3 (TX), 9600 baud
 - Arduino libraries: Adafruit BNO055, Adafruit Unified Sensor, TinyGPSPlus, SoftwareSerial
 - MATLAB for the plots
 
 ## How to run it
 
 1. Install the libraries above in the Arduino IDE.
-2. Wire the BNO055 to the I2C pins and the GPS to pins 2 and 3.
+2. Connect the BNO055 to the I2C pins and the GPS to pins 2 and 3.
 3. Open `gpsPlusIns/gpsPlusIns.ino` and upload it.
-4. Open the Serial Monitor at 115200 baud, take the sensor outside so the GPS gets a fix, and walk around.
-5. Type `b` to simulate a 10-second GPS outage.
-6. Copy the printed numbers into MATLAB or Python to plot them.
+4. Open the Serial Monitor (115200 baud). Take it outside so the GPS can find satellites, and walk around.
+5. Type `b` any time to pretend the GPS is out for 10 seconds.
+6. Copy the numbers it prints into MATLAB or Python to make plots.
 
 ## Files
 
 | File | What it is |
 |---|---|
-| `gpsPlusIns/gpsPlusIns.ino` | The main sketch |
-| `gpsPlusIns/MyInsGpsKalman.h` | Experimental Kalman filter class |
+| `gpsPlusIns/gpsPlusIns.ino` | The main Arduino code |
+| `gpsPlusIns/MyInsGpsKalman.h` | My experimental Kalman filter |
 | `images/` | Plots from my test runs |
 
 ## Credits
 
-[Libraries, tutorials, and anything the Kalman filter code was based on.]
+[Libraries, tutorials, and anything I used to learn this or write the Kalman filter.]
